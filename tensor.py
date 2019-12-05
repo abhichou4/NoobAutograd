@@ -10,9 +10,6 @@ class Dependencies:
         self.tensor = tensor
         self.grad_fn = grad_fn  
 
-    def __repr__(self):
-        return "tensors depended on: {}\n" #Add some way to show the fucntions
-
 class Tensor:
     '''
     Wraps numpy array
@@ -56,7 +53,6 @@ class Tensor:
         the gradien backwards
         '''
         assert self.requires_grad, "tensor not part of backwards graph"
-
         self.grad.data += grad.data #seed value
 
         for dependency in self.depends_on: #recursivly all gradients computed
@@ -79,11 +75,37 @@ class Tensor:
         else:
             depends_on = []
 
-        return Tensor(data, requires_grad, depends_on)     
+        return Tensor(data, requires_grad, depends_on) 
 
-if __name__ == '__main__':
+    def add(self, t):
+        '''
+        Returns sum of two tensors
+        '''
+        data = np.add(self.data, t.data)
+        requires_grad = self.requires_grad or t.requires_grad
 
-    t = Tensor([1,2,3,4], requires_grad=True)
-    s = t.sum()
-    s.backward(Tensor(1.))
-    assert s.grad.data==1 and t.grad.data.all()
+        depends_on = [] 
+        
+        if self.requires_grad:
+            def grad_fn(grad):
+                # Handle broadcasting
+                ndims_added = grad.data.ndim - self.data.ndim
+                for _ in range(ndims_added):
+                    grad.sum(axis=0)
+                return grad 
+            depends_on.append(Dependencies(self, grad_fn))
+        
+        if t.requires_grad:
+            def grad_fn(grad):
+                # Handle broadcasting
+                ndims_added = grad.data.ndim - t.data.ndim 
+                for _ in range(ndims_added):
+                    grad = grad.sum()
+                return grad
+            depends_on.append(Dependencies(t, grad_fn)) 
+
+        return Tensor(data, requires_grad, depends_on)
+
+    def __add__(self, t):
+        return self.add(t)
+        
